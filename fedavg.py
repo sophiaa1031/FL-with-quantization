@@ -103,29 +103,21 @@ def main(args):
     final_test_acc = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
     final_communication_cost = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
        
-    num_combination = len(args.set_degree_noniid)*len(args.set_quant_level)*len(args.set_quant_sche)
+    num_combination = 1#len(args.set_degree_noniid)*len(args.set_quant_level)*len(args.set_quant_sche)
     for s in range(num_combination):
         
-        index0 = int(s / (len(args.set_quant_level) * len(args.set_quant_sche)))
-        index1 = int((s-index0*len(args.set_quant_level) * len(args.set_quant_sche)) / len(args.set_quant_sche))
-        index2 = int(s-index0*len(args.set_quant_level) * len(args.set_quant_sche)-index1*len(args.set_quant_sche))
+        index0 = 0
+        index1 = 0
+        index2 = 1
         args.degree_noniid = args.set_degree_noniid[index0]
-        args.quant_sche = args.set_quant_sche[index2] 
-        args.quant_level = args.set_quant_level[index1]
+        args.quant_sche = args.set_quant_sche[index2]
 
-
-        print('\nNon-i.i.d. degree: {}, quantization scheme: {}, quantization level: {}'.format(args.degree_noniid, args.quant_sche, args.quant_level) )
+        print('\nNon-i.i.d. degree: {}, quantization scheme: {}, quantization level: {}'.format(args.degree_noniid, args.quant_sche, args.quant_level_list) )
         
         loss_test, loss_train = [], []
         acc_test, acc_train = [], []
 
         for m in range(args.num_experiments):
-            # with open('./Data_distribution/{}_dict_users_save_{}.pkl'.format(args.dataset,m),'rb') as f:
-            #     dict_users = pickle.load(f)   
-            # with open('./Data_distribution/{}_dict_server_save_{}.pkl'.format(args.dataset,m),'rb') as f:
-            #     dict_server = pickle.load(f) 
-            
-            # build model
             net_glob = None
             
             if args.model == 'mlp':
@@ -170,30 +162,11 @@ def main(args):
 
             else:
                 exit('Error: unrecognized model')
-            #print("Nerual Net:",net_glob)
-        
+
             net_glob.train()  #Train() does not change the weight values
             # copy weights
             # net_glob.load_state_dict(torch.load('./net_glob/{}_{}_glob.pth'.format(args.model, args.dataset)))
             w_glob = net_glob.state_dict()
-
-                
-            # w_size = 0
-            # w_size_all = 0
-            # for k in w_glob.keys():
-            #     size = w_glob[k].size()
-            #     if(len(size)==1):
-            #         nelements = size[0]
-            #     else:
-            #         nelements = size[0] * size[1]
-            #     w_size += nelements*4
-            #     w_size_all += nelements
-            
-            # print("Size ", k, ": ",nelements*4)
-            # print("\n Weight Size:", w_size, " bytes")
-            # print("\n Weight & Grad Size:", w_size*2, " bytes")
-            # print("\n Each user Training size:", 784* 8/8* args.local_bs, " bytes")
-            # print("\n Total Training size:", 784 * 8 / 8 * 60000, " bytes")
             
             # training
             ###  FedAvg Aglorithm  ###
@@ -206,13 +179,11 @@ def main(args):
                     chosenUsers.sort()
                 else:
                     chosenUsers = range(args.num_users)
-                # print("\nChosen users:", chosenUsers)
-                
+
                 train_loss_locals_list, train_acc_locals_list = [], []
                 mse_errors = [] 
                 communication_cost_sum = 0
                 w_update_locals = []
-                quant_levels = [128 for i in len(chosenUsers)]
                 for idx in range(len(chosenUsers)):
                     local = LocalUpdate(args=args, 
                                         dataset=dataset_train, 
@@ -221,7 +192,7 @@ def main(args):
                     w, loss, acc = local.update_weights(net=copy.deepcopy(net_glob))
                     
                     w_update_local = subtract(w, w_glob)
-                    local_quant = quant_process(args.quant_sche, w_update_local, quant_levels[idx], args.base_bits)
+                    local_quant = quant_process(args.quant_sche, w_update_local, args.quant_level_list[idx], args.base_bits)
                     w_update_local, communication_cost, mse_error = local_quant.quant()
                     
                     train_loss_locals_list.append(loss)
@@ -230,7 +201,7 @@ def main(args):
                     mse_errors.append(mse_error)
                     communication_cost_sum += communication_cost
                     
-                print('MSE errors:', mse_errors)
+                # print('MSE errors:', mse_errors)
                 communication_cost_list.append(communication_cost_sum)
                 w_glob_update = average_weights(w_update_locals)
                 w_glob = add(w_glob, w_glob_update)
@@ -256,9 +227,9 @@ def main(args):
                 test_acc_avg = sum(test_acc_locals_list) / len(test_acc_locals_list)
   
                 time_end = time.time()
-   
+
                 print('\nRunning time = {:.2f}s'.format(time_end-time_start))
-                
+
                 print("\nTrain loss: {}, Train acc: {}".format(train_loss_avg, train_acc_avg))
                 print("\nTest loss: {}, Test acc:  {}".format(test_loss_avg, test_acc_avg))
                 print("\nCommunication cost: {}".format(communication_cost_list))
@@ -284,7 +255,7 @@ def main(args):
 if __name__ == '__main__': 
     
     parser = argparse.ArgumentParser(description='FL with model quantilization')
-    parser.add_argument('--gpu', type=int, default=-1)
+    parser.add_argument('--gpu', type=int, default=-1, help="GPU ID, -1 for CPU")
     parser.add_argument('--dataset', default='mnist', help='mnist or FashionMNIST or cifar or Adult')
     parser.add_argument('--num_classes', default=10)
     parser.add_argument('--iid', default=True)
@@ -292,8 +263,8 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='mlp', help='mlp or cnn')
     parser.add_argument('--hidden_units', type=list, default=[128,64], help='mlp or cnn')
     parser.add_argument('--lr', default=0.002, help='learning rate')    
-    parser.add_argument('--epochs', type=int, default=3, help='number of training epochs')  
-    parser.add_argument('--local_ep', type=int, default=5)     
+    parser.add_argument('--epochs', type=int, default=100, help='number of training epochs')
+    parser.add_argument('--local_ep', type=int, default=2)
     parser.add_argument('--num_users', type=int, default=50) 
     parser.add_argument('--num_chosenusers', type=int, default=5) 
     parser.add_argument('--num_items_train', type=int, default=800)
@@ -301,20 +272,21 @@ if __name__ == '__main__':
     parser.add_argument('--local_bs', type=int, default=128)
     
     parser.add_argument('--base_bits', type=int, default=32)
-    parser.add_argument('--set_quant_level', type=list, default=[64, 128])
+    parser.add_argument('--set_quant_level', type=list, default=[32])
+    parser.add_argument('--quant_level_list', type=list, default=[1,2,3,4,5])
     parser.add_argument('--set_quant_sche', type=list, \
                        default=['orig', 'bucket_quantile', 'bucket_uniform',\
                                 'count_sketch', 'QSGD'])
-    parser.add_argument('--set_degree_noniid', type=list, default=[0, 0.1])    
+    parser.add_argument('--set_degree_noniid', type=list, default=[0.1])
     parser.add_argument('--num_experiments', type=int, default=1)
     args = parser.parse_args() 
  
-    print('\nStart training')
+    # print('\nStart training')
     run_start_time = time.time()   
     
     main(args)
     
-    print('\nExperiment finished')
+    # print('\nExperiment finished')
     run_end_time = time.time()
-    print('\nRun time = {}h'.format((run_end_time-run_start_time)/3600))
+    # print('\nRun time = {}h'.format((run_end_time-run_start_time)/3600))
     

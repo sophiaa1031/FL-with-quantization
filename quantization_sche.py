@@ -95,7 +95,7 @@ def SVD_Split(quantile_level,orig_values_increment):
 
 
 def count_sketch(grad, table_size):
-    device = 'cpu'
+    device = 'cuda'
 
     # compress the gradient if needed
     sketch = CSVec(d=len(grad), c=table_size[1],
